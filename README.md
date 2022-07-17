@@ -1,7 +1,7 @@
 # JServiceAPI
 A test of API consuming with JService
 
-Running this should be fairly simple, have Python installed and run main.py.
+Running this should be fairly simple, have Python installed, install the requests library (pip install requests) and run main.py.
 
 You are able to retrieve a list of random clues with the leftmost button and text-field. Enter the number of clues you want and a handy listbox will appear that is scrollable.
 
