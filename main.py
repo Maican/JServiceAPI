@@ -1,4 +1,5 @@
 import requests
+import requests.exceptions
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import *
@@ -9,19 +10,19 @@ class Error(Exception):
     pass
 
 
-class NoIDProvidedError(Error):
+class NoIDProvidedError:
     """Raised when id is not passed."""
     pass
 
 
 def api_get_random_clues(amount=1):
     query_params = {"count": amount}
-    return requests.get("http://jservice.io/api/random", params=query_params)
+    return get_api_response("http://jservice.io/api/random", query_params)
 
 
 def api_get_categories(amount=1, offset=0):
     query_params = {"count": amount, "offset": offset}
-    return requests.get("http://jservice.io/api/categories", params=query_params)
+    return get_api_response("http://jservice.io/api/categories", query_params)
 
 
 def api_get_clues(value=None, category=None, min_date=None, max_date=None, offset=None):
@@ -36,21 +37,22 @@ def api_get_clues(value=None, category=None, min_date=None, max_date=None, offse
         query_params["max_date"] = max_date
     if offset is not None:
         query_params["offset"] = offset
-    return requests.get("http://jservice.io/api/clues", params=query_params)
+
+    return get_api_response("http://jservice.io/api/clues", query_params)
 
 
 def api_get_category_by_id(category_id):
     if not isinstance(category_id, int):
         raise NoIDProvidedError("Invalid id was provided to retrieve a category.")
     query_params = {"id": category_id}
-    return requests.get("http://jservice.io/api/category", params=query_params)
+    return get_api_response("http://jservice.io/api/category", query_params)
 
 
 def api_mark_clue_invalid(clue_id):
     if not isinstance(clue_id, int):
         raise NoIDProvidedError("Invalid id was provided to mark a clue invalid.")
     query_params = {"id": clue_id}
-    return requests.get("http://jservice.io/api/category", params=query_params)
+    return get_api_response("http://jservice.io/api/category", query_params)
 
 
 def ui_get_random_clues():
@@ -60,23 +62,26 @@ def ui_get_random_clues():
     try:
         clues_to_get = clues_entry.get()
         clues_to_get = int(clues_to_get)
-        random_clues = api_get_random_clues(clues_to_get).json()
-        ui_show_clues(random_clues)
+        random_clues = api_get_random_clues(clues_to_get)
+        if random_clues is not None:
+            ui_show_clues(random_clues)
     except ValueError as exception:
         messagebox.showerror("Oops!", "Invalid entry for number of clues to retrieve!")
         clues_entry.delete(0, len(clues_entry.get()))
 
 
 def ui_get_random_question():
-    random_question = api_get_random_clues(1).json()[0]
-    print(random_question)
+    random_question_response = api_get_random_clues(1)
+    if random_question_response is not None:
+        random_question = next(iter(random_question_response), None)
+        print(random_question)
 
-    answer = messagebox.askyesno("Question #" + str(random_question.get("id")),
-                                    "Value: " + str(random_question.get("value"))
-                                    + "\nQ: " + random_question.get("question")
-                                    + "\n\n" + "Show Answer?")
-    if answer:
-        messagebox.showinfo("Answer #" + str(random_question.get("id")), random_question.get("answer"))
+        answer = messagebox.askyesno("Question #" + str(random_question.get("id")),
+                                        "Value: " + str(random_question.get("value"))
+                                        + "\nQ: " + random_question.get("question")
+                                        + "\n\n" + "Show Answer?")
+        if answer:
+            messagebox.showinfo("Answer #" + str(random_question.get("id")), random_question.get("answer"))
 
 
 def ui_search_clue():
@@ -104,8 +109,9 @@ def ui_search_clue():
 
 def search_api(value, category_id, min_date, max_date, window):
     print(value)
-    clue_search_results = api_get_clues(value, category_id, min_date, max_date).json()
-    ui_show_clues(clue_search_results)
+    clue_search_results = api_get_clues(value, category_id, min_date, max_date)
+    if clue_search_results is not None:
+        ui_show_clues(clue_search_results)
     window.destroy()
 
 
@@ -130,6 +136,18 @@ def ui_show_clues(clues):
     clue_list['yscrollcommand'] = scrollbar.set
     clue_list.grid(row=0, column=0)
     Button(win, text='Close', command=win.destroy)
+
+
+def get_api_response(url, query_params):
+    response = None
+    try:
+        response = requests.get(url, params=query_params).json()
+    except requests.exceptions.RequestException as e:  # This is the correct syntax
+        messagebox.showerror("Error", "The response from the API wasn't correct, is it available?")
+    except requests.exceptions.JSONDecodeError as json_error:
+        messagebox.showerror("Error", "The response from the API wasn't correct, is it available?")
+
+    return response
 
 
 window = tk.Tk()
