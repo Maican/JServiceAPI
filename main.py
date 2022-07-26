@@ -1,3 +1,5 @@
+import re
+
 import requests
 import requests.exceptions
 import tkinter as tk
@@ -16,32 +18,88 @@ class NoIDProvidedError:
 
 
 def api_get_random_clues(amount=1):
+    """
+    Api call to return a random number of clues
+    :param amount: default 1, the number of clues to retrieve.
+    :return: a number of random clues from the api as json.
+    """
     query_params = {"count": amount}
     return get_api_response("http://jservice.io/api/random", query_params)
 
 
 def api_get_categories(amount=1, offset=0):
+    """
+    api call to get a number of categories.
+    :param amount: amount of categories to get.
+    :param offset: pagination offset
+    :return: the categories response in json from get_api_response
+    """
     query_params = {"count": amount, "offset": offset}
     return get_api_response("http://jservice.io/api/categories", query_params)
 
 
-def api_get_clues(value=None, category=None, min_date=None, max_date=None, offset=None):
+def api_get_clues(value="", category="", min_date="", max_date="", offset=""):
+    """
+    Checks the values passed in from the UI and then builds the query.
+    :param value: Value of clue from UI.
+    :param category: Categorys ID from UI.
+    :param min_date: Minimum date from UI.
+    :param max_date: Maximum date from UI.
+    :param offset: Offset for pagination (unused).
+    :return: the json response return from get_api_response
+    """
     query_params = {}
-    if value is not None:
+    valid = True
+    if value != "":
+        try:
+            int(value)
+        except ValueError as ve:
+            messagebox.showerror("Oops!", "Value must be a number.")
+            valid = False
         query_params["value"] = value
-    if category is not None:
+    if category != "":
+        try:
+            int(category)
+        except ValueError as ve:
+            messagebox.showerror("Oops!", "Category id must be a number.")
+            valid = False
         query_params["category"] = category
-    if min_date is not None:
-        query_params["min_date"] = min_date
-    if max_date is not None:
-        query_params["max_date"] = max_date
-    if offset is not None:
+    if min_date != "":
+        if check_date_format(min_date):
+            query_params["min_date"] = min_date
+        else:
+            messagebox.showerror("Date Error", "Min date format wrong.")
+            valid = False
+    if max_date != "":
+        if check_date_format(max_date):
+            query_params["max_date"] = max_date
+        else:
+            messagebox.showerror("Date Error", "Max date format wrong.")
+            valid = False
+    if offset != "":
+        #unused but included for future implementations.
         query_params["offset"] = offset
 
-    return get_api_response("http://jservice.io/api/clues", query_params)
+    #ensure min_date is over max_date if both are included.
+    if query_params.get("min_date") and query_params.get("max_date"):
+        #YYYY-MM-DD string should always resolve correctly in comparison?
+        if max_date < min_date:
+            messagebox.showerror("Date Error", "Min date bigger than Max date.")
+            valid = False
+
+    if valid:
+        return get_api_response("http://jservice.io/api/clues", query_params)
+    else:
+        ui_search_clue(value, category, min_date, max_date)
+        return None
 
 
 def api_get_category_by_id(category_id):
+    """
+    Returns the category when given an id to search.
+    :param category_id: the categories id to find.
+    :return: the response json
+    """
     if not isinstance(category_id, int):
         raise NoIDProvidedError("Invalid id was provided to retrieve a category.")
     query_params = {"id": category_id}
@@ -49,6 +107,11 @@ def api_get_category_by_id(category_id):
 
 
 def api_mark_clue_invalid(clue_id):
+    """
+    Marks the given clue invalid, unused.
+    :param clue_id: the id of the clue to mark invalid.
+    :return: the json response of the invalid call.
+    """
     if not isinstance(clue_id, int):
         raise NoIDProvidedError("Invalid id was provided to mark a clue invalid.")
     query_params = {"id": clue_id}
@@ -57,7 +120,7 @@ def api_mark_clue_invalid(clue_id):
 
 def ui_get_random_clues():
     """
-    Displays a list of random clues depending on what was put into get_clues_entry.
+    Displays a list of random clues depending on what integer was put into get_clues_entry.
     """
     try:
         clues_to_get = clues_entry.get()
@@ -71,6 +134,10 @@ def ui_get_random_clues():
 
 
 def ui_get_random_question():
+    """
+    Retrieves a random question from the api and displays it in a message box.
+    :return:
+    """
     random_question_response = api_get_random_clues(1)
     if random_question_response is not None:
         random_question = next(iter(random_question_response), None)
@@ -84,21 +151,33 @@ def ui_get_random_question():
             messagebox.showinfo("Answer #" + str(random_question.get("id")), random_question.get("answer"))
 
 
-def ui_search_clue():
+def ui_search_clue(value="", category="", min_date="", max_date=""):
+    """
+    The custom ui for searching for specific clues based on criteria.
+    if any of the parameters are set, use those as defaults.
+    """
     win = Toplevel()
     win.title('Clue Search')
     Label(win, text="Value").pack()
     value_entry = Entry(win, width=200)
     value_entry.pack()
+    if value != "":
+        value_entry.insert(0, value + "")
     Label(win, text="Category ID").pack()
     category_id_entry = Entry(win, width=200)
+    if category != "":
+        category_id_entry.insert(0, category + "")
     category_id_entry.pack()
     Label(win, text="Minimum date (YYYY-MM-DD)").pack()
     min_date_entry = Entry(win, width=200)
     min_date_entry.pack()
+    if min_date != "":
+        min_date_entry.insert(0, min_date)
     Label(win, text="Maximum date (YYYY-MM-DD)").pack()
     max_date_entry = Entry(win,width=200)
     max_date_entry.pack()
+    if max_date != "":
+        max_date_entry.insert(0, max_date)
 
     Button(win, text='Search', command=lambda: search_api(value_entry.get(),
                                                           category_id_entry.get(),
@@ -107,15 +186,27 @@ def ui_search_clue():
                                                           win)).pack()
 
 
-def search_api(value, category_id, min_date, max_date, window):
+def search_api(value, category_id, min_date, max_date, search_window):
+    """
+    Searches the api based on what was passed in from ui_search_clue.
+    :param value: value of clue to find
+    :param category_id: category ID to find.
+    :param min_date: minimum date the clue aired.
+    :param max_date: maximum date the clue aired
+    :param search_window: reference to close the parent search window.
+    """
     print(value)
     clue_search_results = api_get_clues(value, category_id, min_date, max_date)
     if clue_search_results is not None:
         ui_show_clues(clue_search_results)
-    window.destroy()
+    search_window.destroy()
 
 
 def ui_show_clues(clues):
+    """
+    Custom UI to show the clue search results.
+    :param clues: the clues to show.
+    """
     win = Toplevel()
     win.title("Clue Search Results")
     width = 125
@@ -139,6 +230,12 @@ def ui_show_clues(clues):
 
 
 def get_api_response(url, query_params):
+    """
+    Helper method to retrieve data from the api and convert it to json.
+    :param url: url to reach
+    :param query_params: parameters the API may need
+    :return: returns the response of the call formatted to json.
+    """
     response = None
     try:
         response = requests.get(url, params=query_params).json()
@@ -150,6 +247,22 @@ def get_api_response(url, query_params):
     return response
 
 
+def check_date_format(date):
+    """
+    Method to check if date formats passed are YYYY-MM-DD
+    :param date:
+    :return: true if it matches regex, false if not.
+    """
+    regex = re.compile("\d{4}-\d{2}-\d{2}")
+    match = re.match(regex, date)
+    matches = False
+    if match:
+        matches = True
+
+    return matches
+
+
+#Building the main UI.
 window = tk.Tk()
 window.title("JSService API Calls")
 window.minsize(800, 560)
